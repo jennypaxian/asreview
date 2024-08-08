@@ -1175,6 +1175,58 @@ def api_get_progress_density(project):
     return jsonify({"relevant": df_relevant, "irrelevant": df_irrelevant})
 
 
+@bp.route("/projects/<project_id>/progress_density_detail", methods=["GET"])
+@login_required
+@project_authorization
+def api_get_progress_density_detail(project):
+    """Get relevant records in relation to progress_density in the order of labelling"""
+
+    # Record: Your paper (has unique Record ID), Label: Your label (has unique labelling index number in order of labelling)
+
+    # get labelling history
+    with open_state(project.project_path) as s:
+        data_detail = s.get_pool_labeled_pending()
+
+    # Create a key value dictionary  Number in Order of Labelling -> Record ID
+    label_index_to_record_id = dict()
+
+    # ["label"], get all labelled records, if v==1 - Relevant record
+    # Write into dictionary, Number in Order of Labelling -> Record ID
+    for k, v in enumerate(data_detail[1]["label"]):
+        if (v == 1):
+            label_index_to_record_id[k] = int(data_detail[1]["record_id"][k])
+
+    # Format: Labelling number/index -> detailed set of details for record id
+    record_id_to_desc = dict()
+
+    for k, v in label_index_to_record_id.items():
+        # Fetch full record details
+        current_record_detail = project.read_data().record(v)
+
+        # Record + Label Details key value store
+        detail_set = dict()
+
+        # get labelling details
+        # We only want the labelling time from here for fancy statistics...
+        with open_state(project.project_path) as s:
+            current_label_detail = s.get_data_by_record_id(record_id=v)
+        
+        # Finyally, the data we wanted!! 🎉🎉🎉
+        detail_set['record_id'] = int(current_record_detail.record_id);
+        detail_set['doi'] = current_record_detail.doi;
+        detail_set['url'] = current_record_detail.url;
+        detail_set['authors'] = current_record_detail.authors;
+        detail_set['keywords'] = current_record_detail.keywords;
+        detail_set['title'] = current_record_detail.title;
+        detail_set['abstract'] = current_record_detail.abstract;
+        detail_set['labeling_time'] = current_label_detail.to_dict()['labeling_time'][0];
+        record_id_to_desc[k] = detail_set;
+
+    # Return result to API caller
+    payload = {"relevant_by_labelling_order": record_id_to_desc}
+
+    return jsonify(payload)
+
 @bp.route("/projects/<project_id>/progress_recall", methods=["GET"])
 @login_required
 @project_authorization
